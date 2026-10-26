@@ -28,7 +28,7 @@
 **Out of scope:**
 <!-- List what is explicitly excluded.
      Examples: Terraform (cloud-iac mode), test execution suites (cloud-testing mode),
-     architecture decisions (cloud-architect mode). -->
+     architecture decisions ([cloud-architect mode](https://github.com/krondor/bob-cloud-architect)). -->
 
 ---
 

@@ -9,7 +9,7 @@ The `cloud-codegen` mode gives Bob the role of a senior cloud-native Python engi
 ## What it is not
 
 This mode does not design architecture, generate Terraform, or produce test suites. For those, see:
-- `bob-cloud-architect` — architecture design
+- [`bob-cloud-architect`](https://github.com/krondor/bob-cloud-architect) — architecture design
 - `bob-cloud-iac` — Terraform infrastructure as code
 - `bob-cloud-testing` — test suite generation
 
