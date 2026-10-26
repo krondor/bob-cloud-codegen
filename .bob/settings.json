@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "tool:edit": [
+      {
+        "description": "Run ruff + mypy on Python files before edit",
+        "command": "node .bob/hooks/pre-edit.mjs",
+        "modes": ["cloud-codegen"]
+      }
+    ]
+  }
+}

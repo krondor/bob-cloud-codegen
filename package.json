@@ -1,0 +1,37 @@
+{
+  "name": "bob-cloud-codegen",
+  "version": "0.2.0",
+  "description": "IBM Bob cloud code generator mode — event-driven Python source generation",
+  "bin": {
+    "bob-cloud-codegen": "scripts/install.mjs"
+  },
+  "main": "scripts/install.mjs",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    ".bob",
+    "AGENTS.md",
+    "specs",
+    "scripts"
+  ],
+  "scripts": {
+    "install-mode": "node scripts/install.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "keywords": [
+    "bob",
+    "ibm-bob",
+    "claude",
+    "ai-agent",
+    "cloud",
+    "python",
+    "codegen",
+    "event-driven"
+  ],
+  "license": "MIT"
+}

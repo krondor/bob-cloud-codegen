@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "awslabs_aws-documentation-mcp-server": {
+      "command": "uvx",
+      "args": ["awslabs.aws-documentation-mcp-server@latest"]
+    },
+    "microsoft-learn": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-microsoft-learn"]
+    }
+  }
+}

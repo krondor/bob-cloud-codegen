@@ -1,0 +1,43 @@
+{
+  "_comment": [
+    "skills-lock.json — pinned skill sources for bob-cloud-codegen.",
+    "",
+    "A skill is a SKILL.md file that Bob loads via use_skill. It can come from any source.",
+    "This file records where each installed skill came from and what version/commit was",
+    "vendored, so the workspace is reproducible and auditable."
+  ],
+  "skills": {
+    "event-driven-python-patterns": {
+      "source": "local",
+      "type": "custom",
+      "version": "0.1.0",
+      "path": ".bob/skills/event-driven-python-patterns/SKILL.md",
+      "description": "Event-driven Python patterns covering AWS Lambda, Azure Functions, GCP Cloud Run, SQS/SNS, EventBridge, Pub/Sub, Service Bus handlers, batching, idempotency, and DLQ routing.",
+      "authored": "2026-03-30"
+    },
+    "enterprise-integration-adapters": {
+      "source": "local",
+      "type": "custom",
+      "version": "0.1.0",
+      "path": ".bob/skills/enterprise-integration-adapters/SKILL.md",
+      "description": "Python client adapter patterns for Snowflake, Databricks, BigQuery, Kafka, EventBridge, Cloud Pub/Sub, Azure Service Bus, and Apache Iceberg with dependency injection and mockability.",
+      "authored": "2026-03-30"
+    },
+    "llm-prompt-and-pipeline-patterns": {
+      "source": "local",
+      "type": "custom",
+      "version": "0.1.0",
+      "path": ".bob/skills/llm-prompt-and-pipeline-patterns/SKILL.md",
+      "description": "LLM invocation pipelines, prompt template management in prompts/, structured output extraction (Pydantic), token budgeting, exponential backoff, and PII sanitization in Python.",
+      "authored": "2026-03-30"
+    },
+    "code-quality-and-review": {
+      "source": "local",
+      "type": "custom",
+      "version": "0.1.0",
+      "path": ".bob/skills/code-quality-and-review/SKILL.md",
+      "description": "Quality review checklist, static typing gates (mypy strict), docstring standards, error handling verification, mockability checks, and P0/P1 review finding criteria for Python source code.",
+      "authored": "2026-03-30"
+    }
+  }
+}
