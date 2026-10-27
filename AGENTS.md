@@ -10,20 +10,22 @@ Keep it short, accurate, and reviewed like code. Update it when conventions chan
 
 This workspace provides two Bob modes:
 
-- **`cloud-codegen`** — generates modular, production-ready Python source code (`src/`) and prompt templates (`prompts/`) for cloud-native, event-driven enterprise systems from approved architecture specs. No architecture diagrams, Terraform, or full test suites.
+- **`cloud-codegen`** — generates modular, production-ready Python source code (`src/`) and prompt templates (`prompts/`) for cloud-native, event-driven enterprise systems from approved architecture specs, consuming [`bob-cloud-architect`](https://github.com/krondor/bob-cloud-architect) outputs. No architecture diagrams, Terraform, or full test suites.
 - **`code-reviewer`** — read-only gap analysis of generated Python code against typing, docstrings, error handling, mockability, structured logging, and security standards. Does not write files or modify code.
 
-**Workspace layout:**
+**Workspace layout** (one spec ID shared with the architect; each mode owns its own files):
 
 ```
-specs/          Spec-driven work: spec.md, plan.md, tasks.md, checkpoint.md per component or feature
-src/            Generated Python source code (agent output)
-prompts/        Versioned LLM prompt templates (agent output)
-docs/<spec-id>/ Architecture deliverables produced upstream (input to this mode)
-.bob/           Bob config: custom modes, rules, skills, MCP example
+specs/<id>/spec.md              Human-owned; read-only for all modes
+specs/<id>/{plan,tasks,checkpoint}.md   cloud-architect (read-only here)
+specs/<id>/code/                plan.md, tasks.md, checkpoint.md — owned by cloud-codegen
+docs/<id>/*.md                  Architecture deliverables (read-only here)
+docs/<id>/code/                 sdk-evidence.md, review-findings.md — owned by cloud-codegen
+src/, prompts/                  Generated code (agent output)
+.bob/                           Bob config: custom modes, rules, skills, hooks, MCP example
 ```
 
-A `checkpoint.md` file in each spec folder records the session state so work can resume across sessions or mode switches without re-reading the entire history: spec revision, completed artifacts, blockers, validation status, and the next action.
+`specs/<id>/code/checkpoint.md` records session state so work can resume across sessions or mode switches without replaying history. Handoff rules: `.bob/rules-cloud-codegen/04-architect-handoff.md`.
 
 ---
 
@@ -31,9 +33,9 @@ A `checkpoint.md` file in each spec folder records the session state so work can
 
 All code generation is spec-driven. No code is written until a spec exists and a human has approved its requirements.
 
-1. **Specify** (`specs/<NNN-name>/spec.md`): component requirements, interface contracts, data formats, error handling expectations, and testable acceptance criteria. If no spec exists, the agent drafts one (status `draft`, approval `pending`). Only a human sets approval.
-2. **Plan** (`specs/<NNN>/plan.md`): implementation approach, module breakdown, dependencies, integration adapter design.
-3. **Tasks** (`specs/<NNN>/tasks.md`): ordered implementation checklist — each item one reviewable module or file.
+1. **Specify** (`specs/<id>/spec.md`): human-owned. Reuse the architect's spec and add code acceptance criteria; codegen never creates or edits it. Only a human sets approval.
+2. **Plan** (`specs/<id>/code/plan.md`): component → module mapping, adapter design, dependencies.
+3. **Tasks** (`specs/<id>/code/tasks.md`): ordered implementation checklist — each item one reviewable module or file.
 4. **Implement**: one module at a time, validating against the spec after each.
 5. **Verify**: map every spec acceptance criterion to evidence before closing the spec.
 
@@ -48,7 +50,9 @@ Status values: `draft`, `in-progress`, `ready-for-review`, `accepted`. Approval 
 | `python` | `>= 3.11` | Standard runtime |
 | `ruff` | latest | Linting and formatting |
 | `mypy` | latest | Strict type checking (`mypy --strict src/`) |
-| `node` | `>= 18` | For Bob installer and hooks |
+| `node` | `>= 18` | For Bob installer and the optional lint hook |
+
+Installing alongside `bob-cloud-architect`: use `--no-agents` if the workspace already has a filled-in `AGENTS.md`.
 
 ---
 
@@ -69,7 +73,7 @@ mypy src/ --strict
 
 ## Grounding sources
 
-The agent grounds integration adapter patterns in the official SDK documentation for each data platform and cloud service. When MCP documentation servers are configured (`.bob/mcp.json`), it consults live documentation before generating client calls.
+The agent grounds SDK calls in official documentation, within the lookup budget and evidence statuses in `.bob/rules-cloud-codegen/05-sdk-grounding.md`. When MCP documentation servers are configured (`.bob/mcp.json`, git-ignored and never packaged), it consults them before generating client calls.
 
 ---
 
@@ -99,7 +103,9 @@ Load with `use_skill` when the task needs them:
 | `event-driven-python-patterns` | `.bob/skills/event-driven-python-patterns/SKILL.md` | AWS Lambda / Azure Functions / GCP Cloud Run handlers, batching, idempotency, DLQ routing |
 | `enterprise-integration-adapters` | `.bob/skills/enterprise-integration-adapters/SKILL.md` | Snowflake, Databricks, BigQuery, Kafka, EventBridge, Pub/Sub, Service Bus client protocols |
 | `llm-prompt-and-pipeline-patterns` | `.bob/skills/llm-prompt-and-pipeline-patterns/SKILL.md` | LLM invocation pipelines, prompt template management in prompts/, structured outputs, token budgeting |
-| `code-quality-and-review` | `.bob/skills/code-quality-and-review/SKILL.md` | Quality review checklist, static typing gates, docstring standards, P0/P1 review finding criteria |
+| `code-quality-and-review` | `.bob/skills/code-quality-and-review/SKILL.md` | Review checklist, severity levels, and the review-findings block format (single source) |
+
+Skill names are flat across all installed repos and must not collide with `bob-cloud-architect` skill names. This mode may load `cloud-architecture-patterns` to understand a pattern but never treats it as the specification; `docs/<id>/` is.
 
 ---
 
@@ -112,4 +118,6 @@ A code generation task is done when:
 - [ ] Every adapter accepts an injectable client (mockable).
 - [ ] `ruff check src/` and `mypy --strict src/` pass with zero errors.
 - [ ] Structured logging emits `correlation_id` across all processing stages.
+- [ ] Every cloud service used appears in `docs/<id>/component-matrix.md`.
+- [ ] Unverified SDK facts are listed in `docs/<id>/code/sdk-evidence.md`.
 - [ ] Spec acceptance criteria are mapped to evidence in the PR.

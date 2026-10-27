@@ -1,6 +1,6 @@
 ---
 name: event-driven-python-patterns
-version: 0.1.0
+version: 0.2.0
 description: Event-driven Python patterns covering AWS Lambda, Azure Functions, GCP Cloud Run, SQS/SNS, EventBridge, Pub/Sub, Service Bus handlers, batching, idempotency, and DLQ routing.
 when_to_use: Use when generating Python event handlers, queue consumers, batch processors, stream listeners, or dead-letter queue routing logic.
 ---
@@ -24,44 +24,61 @@ Architectural patterns and implementation templates for serverless and container
 ## Serverless handler patterns
 
 ### AWS Lambda standard handler
+
+Error classes (`PermanentError`, `TransientError`) and the DLQ envelope come from rule 03. Permanent
+errors are published to the DLQ and acknowledged; transient errors are reported as batch item failures
+so the queue retries them. Dependencies are injected; the entry point only wires them.
+
 ```python
-"""AWS Lambda SQS/EventBridge event handler."""
+"""AWS Lambda SQS handler with partial batch response."""
 from __future__ import annotations
 import logging
-from typing import Any, Mapping
-from pydantic import BaseModel, ValidationError
+from typing import Any, Callable, Mapping, Protocol
+
+from errors import PermanentError, TransientError  # rule 03 taxonomy
 
 logger = logging.getLogger(__name__)
 
-class EventRecord(BaseModel):
-    record_id: str
-    payload: dict[str, Any]
-    correlation_id: str
 
-def lambda_handler(event: Mapping[str, Any], context: Any) -> dict[str, Any]:
-    """Process incoming batch of event records."""
-    batch_item_failures: list[dict[str, str]] = []
-    records = event.get("Records", [])
-    
-    for record in records:
-        msg_id = record.get("messageId", "unknown")
+class DeadLetterPublisher(Protocol):
+    """Publishes a rejected record, wrapped in the rule 03 envelope, to the DLQ."""
+
+    def publish(self, body: str, exc: Exception, correlation_id: str) -> None: ...
+
+
+def handle_batch(
+    event: Mapping[str, Any],
+    process_record: Callable[[str], None],
+    dlq: DeadLetterPublisher,
+) -> dict[str, list[dict[str, str]]]:
+    """Process an SQS batch, returning only the failed items for retry.
+
+    Args:
+        event: SQS event containing a ``Records`` list.
+        process_record: Business logic for one record body.
+        dlq: Publisher for permanently rejected records.
+
+    Returns:
+        A ``batchItemFailures`` mapping listing transient failures only.
+    """
+    failures: list[dict[str, str]] = []
+    for record in event.get("Records", []):
+        msg_id = str(record.get("messageId", "unknown"))
+        extra = {"correlation_id": msg_id, "record_id": msg_id}
         try:
-            # Process individual record
             process_record(record["body"])
-        except ValidationError as exc:
-            logger.error("Permanent schema validation error for message %s: %s", msg_id, exc)
-            # Route to DLQ or mark for failure handling
-            batch_item_failures.append({"itemIdentifier": msg_id})
-        except Exception as exc:
-            logger.exception("Transient failure for message %s: %s", msg_id, exc)
-            batch_item_failures.append({"itemIdentifier": msg_id})
-
-    return {"batchItemFailures": batch_item_failures}
-
-def process_record(body_raw: str) -> None:
-    """Business logic per record with injected dependencies."""
-    pass
+        except PermanentError as exc:
+            logger.error("permanent failure, routing to DLQ", extra=extra)
+            dlq.publish(record["body"], exc, msg_id)
+        except TransientError:
+            logger.warning("transient failure, will retry", extra=extra)
+            failures.append({"itemIdentifier": msg_id})
+    return {"batchItemFailures": failures}
 ```
+
+Unexpected exceptions are deliberately not caught: they surface to the runtime instead of being
+silently classified. The Lambda entry point (`lambda_handler`) builds the real dependencies once and
+calls `handle_batch`.
 
 ### Azure Functions & GCP Cloud Run patterns
 - **Azure Functions:** Use `azure.functions.QueueMessage` or `EventGridEvent` bindings with typed input models. Return explicit status.
@@ -79,8 +96,8 @@ def process_record(body_raw: str) -> None:
 
 ## DLQ and redrive routing
 
-- Wrap messages in a consistent envelope containing original payload, failure reason, stack trace, timestamp, and retry count.
-- Emit structured metric on DLQ publication (`Metric: DLQMessageCount`, tags: `source`, `error_type`).
+- Use the single DLQ envelope defined in rule 03; do not define a second shape.
+- Emit a structured metric on DLQ publication (`DLQMessageCount`, tags: `source`, `error_type`).
 
 ---
 

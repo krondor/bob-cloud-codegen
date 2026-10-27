@@ -7,8 +7,8 @@ Thank you for improving this mode. This guide covers git-based contributions —
 Good contributions to this repo:
 
 - **Rules improvements** — corrections, additions, or restructuring of files in `.bob/rules-cloud-codegen/`
-- **New rules domains** — a new numbered rules file for a gap in current coverage (e.g. async patterns, streaming, multi-cloud SDK differences)
-- **Hook improvements** — changes to `.bob/hooks/pre-edit.mjs` (new checks, better error messages, graceful fallback improvements)
+- **New rules** — only for a constraint that applies to every task; domain knowledge belongs in a skill
+- **Hook improvements** — changes to `.bob/hooks/lint-python.mjs`
 - **AGENTS.md template improvements** — better placeholder text, missing placeholder sections
 - **Installer fixes** — bug fixes or new flags in `scripts/install.mjs`
 - **Spec template improvements** — clearer acceptance criteria or missing sections in `specs/TEMPLATE/spec.md`
@@ -42,12 +42,12 @@ Use the conventional commits format:
 ```
 
 Types: `feat`, `fix`, `docs`, `refactor`, `chore`  
-Scope: `rules`, `hook`, `installer`, `agents-md`, `spec`, `mode-yaml`
+Scope: `rules`, `skills`, `hook`, `installer`, `agents-md`, `spec`, `mode-yaml`
 
 Examples:
 ```
-feat(rules): add 09-async-patterns rules file for asyncio event loop patterns
-fix(hook): exit 0 when ruff is not on PATH instead of crashing
+feat(skills): add asyncio patterns to event-driven-python-patterns
+fix(hook): skip silently when ruff is not on PATH
 docs(spec): add acceptance criterion for OpenTelemetry trace propagation
 ```
 
@@ -60,49 +60,48 @@ Keep PRs focused. One logical change per PR.
 Include in the PR description:
 - What changed and why
 - How to verify (e.g. "Install `--with-hooks` into a Python workspace and confirm ruff runs on `.py` file write")
-- Whether the dispatch table in `custom_modes.yaml` was updated (required when adding a rules file)
+- Whether the always-loaded size ceilings changed (they should only go down)
 
-## Adding a rules file
+## Changing rules
 
-1. Create `.bob/rules-cloud-codegen/NN-<name>.md` using the next available two-digit prefix.
-2. Start the file with `<!-- load when: <condition> -->` on the first line.
-3. Add a matching entry to the dispatch table in `.bob/custom_modes.yaml` under `customInstructions`.
-4. Include the new file in your PR with a brief explanation of what gap it fills.
+Bob loads every file in `.bob/rules-<slug>/` alphabetically for the active mode; there is no conditional loading, so `<!-- load when -->` headers or dispatch tables do nothing.
 
-## Modifying the pre-edit hook
+1. Add an instruction only if it applies to every task; otherwise it belongs in a skill.
+2. Remove a contradiction before adding a rule. Grep both phrasings, including `customInstructions` in `.bob/custom_modes.yaml`.
+3. Define each fact once. The review-findings format lives only in the `code-quality-and-review` skill; the error taxonomy and DLQ envelope only in rule 03.
+4. Keep always-loaded content under the ceilings in `test/install.test.mjs`. Trim wording rather than raising a ceiling.
+5. Do not let a rule or template write a path owned by `bob-cloud-architect` (see `04-architect-handoff.md`).
 
-The hook at `.bob/hooks/pre-edit.mjs` runs before every Python file write. Principles to preserve:
+## Modifying the lint hook
 
-- Fail open: if a required tool (`ruff`, `mypy`) is not installed, exit 0 and allow the edit
-- Non-Python files must pass through without running any checks
-- Error output goes to stderr; exit code 0 = allow, non-zero = block
+`.bob/hooks/lint-python.mjs` is a `PostToolUse` hook. Principles to preserve:
 
-After changing the hook, test it manually:
+- Always exit 0: `PostToolUse` cannot block, and a hook error must never break an edit.
+- Skip non-Python files, missing files, and uninstalled tools silently.
+- Read the path from `tool_input.path`; report findings on stdout, which Bob appends beside the tool result.
+
+Test it with the real payload shape:
+
 ```bash
-echo '{"path": "src/handler.py"}' | node .bob/hooks/pre-edit.mjs
-echo '{"path": "README.md"}' | node .bob/hooks/pre-edit.mjs
+echo '{"cwd":".","tool_input":{"path":"README.md"}}' | node .bob/hooks/lint-python.mjs   # silent, exit 0
+echo '{"cwd":".","tool_input":{"path":"src/example.py"}}' | node .bob/hooks/lint-python.mjs
 ```
 
 ## Adding or updating a skill
 
-1. Place the file at `.bob/skills/<skill-name>/SKILL.md`.
-2. Add an entry to `skills-lock.json` with the source URL and version or commit hash.
-3. Add a row to the **Skills** table in `AGENTS.md`.
-4. PR description should include where the skill came from and why it adds value to this specific mode.
+1. Place the file at `.bob/skills/<skill-name>/SKILL.md` with `name`, `version`, `description`, and `when_to_use` front matter.
+2. Pick a name that does not collide with any `bob-cloud-architect` skill (the namespace is flat).
+3. Add an entry to `skills-lock.json`; its `version` must equal the front matter (test-enforced).
+4. Add a row to the **Skills** table in `AGENTS.md`.
+5. Cite a doc URL and check date for every vendor or SDK claim. No unverifiable model names or SDK signatures.
 
-To update a vendored skill, replace the file and update the `skills-lock.json` entry.
+To update a skill, bump `version` in both the file and `skills-lock.json` together.
 
 ## Validation before opening a PR
 
 ```bash
-# Dry-run the installer against a temp workspace
+npm test
 node scripts/install.mjs --dry-run /tmp/test-workspace
-
-# Test hook with a Python file path
-echo '{"path": "src/example.py"}' | node .bob/hooks/pre-edit.mjs
-
-# Test hook with a non-Python file (should exit 0 silently)
-echo '{"path": "README.md"}' | node .bob/hooks/pre-edit.mjs
 ```
 
 ## Review expectations
@@ -110,8 +109,7 @@ echo '{"path": "README.md"}' | node .bob/hooks/pre-edit.mjs
 PRs are reviewed for:
 - Accuracy of Python, cloud SDK, and observability claims in rules files
 - Consistency with existing rules style (concise, prescriptive, no prose padding)
-- Correct `<!-- load when: ... -->` header on any new rules file
-- Dispatch table updated if a new rules file was added
-- Hook changes preserve fail-open behavior
+- No fact defined in two places; no rule that only applies to some tasks
+- Hook changes preserve always-exit-0 behavior
 - No org-specific or client-specific content
 - `skills-lock.json` updated if a skill was added or changed

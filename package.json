@@ -1,6 +1,6 @@
 {
   "name": "bob-cloud-codegen",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "IBM Bob cloud code generator mode — event-driven Python source generation",
   "bin": {
     "bob-cloud-codegen": "scripts/install.mjs"
@@ -11,8 +11,15 @@
     "node": ">=18"
   },
   "files": [
-    ".bob",
+    ".bob/custom_modes.yaml",
+    ".bob/hooks",
+    ".bob/mcp.json.example",
+    ".bob/rules-cloud-codegen",
+    ".bob/rules-code-reviewer",
+    ".bob/settings.json",
+    ".bob/skills",
     "AGENTS.md",
+    "skills-lock.json",
     "specs",
     "scripts"
   ],
