@@ -1,6 +1,6 @@
 ---
 name: llm-prompt-and-pipeline-patterns
-version: 0.1.0
+version: 0.2.0
 description: LLM invocation pipelines, prompt template management in prompts/, structured output extraction (Pydantic), token budgeting, exponential backoff, and PII sanitization in Python.
 when_to_use: Use when generating Python code that formats prompt templates, calls LLM inference APIs, parses structured LLM outputs, or implements AI processing pipelines.
 ---
@@ -23,12 +23,14 @@ Patterns for reliable, type-safe, and cost-effective LLM integration pipelines i
 
 ## Prompt template management
 
-Store versioned prompt templates under `prompts/<name>_prompt.yaml`:
+Store versioned prompt templates under `prompts/<name>_prompt.yaml`. Model identifiers and
+hyperparameters come from configuration or the architect's approved model class, never from memory.
+Mark hyperparameters `provisional` until tuned against an evaluation set:
 
 ```yaml
 version: "1.0.0"
-model_compatibility: ["gpt-4o", "claude-3-5-sonnet-20241022", "gemini-1.5-pro"]
-temperature: 0.0
+model_class: "<from the approved architecture; resolved to a model ID via configuration>"
+temperature: 0.0   # provisional
 system_prompt: |
   You are an enterprise document extraction assistant. Extract structured entities in JSON.
 user_template: |
@@ -51,8 +53,10 @@ Use Pydantic models to validate LLM JSON completions:
 from __future__ import annotations
 import json
 import logging
-from typing import Any, TypeVar
+from typing import TypeVar
 from pydantic import BaseModel, ValidationError
+
+from errors import PermanentError  # rule 03 taxonomy
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
@@ -72,9 +76,13 @@ def parse_llm_json(raw_completion: str, model_cls: type[T]) -> T:
         data = json.loads(cleaned.strip())
         return model_cls.model_validate(data)
     except (json.JSONDecodeError, ValidationError) as exc:
-        logger.error("Failed to parse LLM structured output: %s (Raw: %s)", exc, raw_completion)
-        raise ValueError(f"Malformed LLM response: {exc}") from exc
+        # Log the failure and length only; completions may contain PII.
+        logger.error("Failed to parse LLM structured output: %s (chars=%d)", type(exc).__name__, len(raw_completion))
+        raise PermanentError(f"Malformed LLM response: {type(exc).__name__}") from exc
 ```
+
+`PermanentError` is the rule 03 type. A malformed completion is routed to the DLQ, not retried blindly;
+retry only if the pipeline deliberately re-prompts.
 
 ---
 

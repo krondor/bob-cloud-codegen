@@ -1,7 +1,7 @@
 ---
 name: enterprise-integration-adapters
-version: 0.1.0
-description: Python client adapter patterns for Snowflake, Databricks, BigQuery, Kafka, EventBridge, Cloud Pub/Sub, Azure Service Bus, and Apache Iceberg with dependency injection and mockability.
+version: 0.2.0
+description: Python client adapter patterns for Snowflake, Databricks, BigQuery, Kafka, EventBridge/SQS, Cloud Pub/Sub, Azure Service Bus, and Apache Iceberg with dependency injection and mockability. Pattern guidance only; SDK facts must be verified per rule 05.
 when_to_use: Use when implementing Python adapters or client wrappers connecting to external enterprise data platforms, message buses, or analytics systems.
 ---
 
@@ -44,6 +44,56 @@ class WarehouseWriter(Protocol):
         ...
 ```
 
+### Injectable concrete adapter
+
+The concrete adapter takes an already-built SDK client; a factory builds the real one at the edge.
+Wrap SDK exceptions into the rule 03 taxonomy here.
+
+```python
+"""SQS publisher adapter."""
+from __future__ import annotations
+import json
+from typing import Any
+
+from botocore.exceptions import ClientError  # re-verify against SDK version
+
+from errors import PermanentError, TransientError  # rule 03 taxonomy
+
+_RETRYABLE_CODES = frozenset({"ThrottlingException", "ServiceUnavailable", "RequestTimeout"})  # re-verify
+
+
+class SqsPublisher:
+    """Publishes JSON messages to one SQS queue using an injected boto3-style client."""
+
+    def __init__(self, client: Any, queue_url: str) -> None:
+        self._client = client  # injected; never created here
+        self._queue_url = queue_url  # from configuration, never a literal
+
+    def publish(self, message: dict[str, Any], correlation_id: str) -> str:
+        """Send one message and return its message id.
+
+        Args:
+            message: JSON-serialisable payload.
+            correlation_id: Propagated into the message attributes and logs.
+
+        Raises:
+            TransientError: Throttling or service unavailability; retry with backoff.
+            PermanentError: The request was rejected as invalid.
+        """
+        try:
+            response = self._client.send_message(  # re-verify against SDK version
+                QueueUrl=self._queue_url,
+                MessageBody=json.dumps(message),
+                MessageAttributes={"correlation_id": {"DataType": "String", "StringValue": correlation_id}},
+            )
+        except ClientError as exc:
+            code = str(exc.response.get("Error", {}).get("Code", ""))
+            if code in _RETRYABLE_CODES:
+                raise TransientError(code) from exc
+            raise PermanentError(code) from exc
+        return str(response["MessageId"])
+```
+
 ---
 
 ## Data platform adapters
@@ -61,6 +111,12 @@ class WarehouseWriter(Protocol):
 - Use `google-cloud-bigquery`.
 - Implement parameterized queries and streaming inserts (`insert_rows_json`) with schema validation.
 
+### Apache Iceberg pattern
+- Use `pyiceberg` against a catalog configured from environment or secret manager; never embed catalog URIs or credentials.
+- Prefer a REST catalog with vended storage credentials over long-lived storage keys, if the approved architecture specifies one.
+- Write through a `WarehouseWriter`-style protocol so engines (Snowflake, Databricks) and tests share one interface.
+- Table names, partitioning, and schema come from the architect's data contract, not from this skill.
+
 ---
 
 ## Messaging bus adapters
@@ -68,6 +124,7 @@ class WarehouseWriter(Protocol):
 - **Kafka / Confluent Kafka:** Use `confluent-kafka` with schema registry support (Avro/JSON Schema).
 - **AWS EventBridge / SQS:** Use `boto3` client injected via factory; handle `ClientError` with exponential backoff.
 - **Azure Service Bus:** Use `azure-servicebus` SDK with async or sync receiver; complete/abandon message explicitly.
+- **GCP Pub/Sub:** Use `google-cloud-pubsub`; ack only after successful processing, and set a dead-letter topic on the subscription (infrastructure is the IaC mode's concern).
 
 ---
 

@@ -1,21 +1,22 @@
 ---
 name: code-quality-and-review
-version: 0.1.0
-description: Quality review checklist, static typing gates (mypy strict), docstring standards, error handling verification, mockability checks, and P0/P1 review finding criteria for Python source code.
-when_to_use: Use when reviewing generated Python source code or conducting a pre-handoff code quality audit in cloud-codegen or code-reviewer mode.
+version: 0.2.0
+description: Review checklist, P0/P1/P2 severity criteria, and the review-findings block format for generated Python source. Single home of the findings format used by code-reviewer and cloud-codegen.
+when_to_use: Use when reviewing generated Python source code or self-checking a module against the quality gates before handoff, in cloud-codegen or code-reviewer mode.
 ---
 
 # Code Quality and Review Checklist
 
-Systematic verification framework for reviewing Python source code against enterprise reliability, security, and testability standards.
+Verification framework for generated Python. The standards themselves live in the always-loaded rules
+(`02-code-quality-standards.md`, `03-error-handling-and-retries.md`); this skill is how to check them.
 
 ## Skill navigation
 
 | Section | Description |
 |---|---|
 | [Review checklist](#review-checklist) | Category-by-category verification items |
-| [P0 blocker criteria](#p0-blocker-criteria) | Non-negotiable quality criteria that block merge |
-| [Review findings block format](#review-findings-block-format) | Markdown format for findings handoff |
+| [Severity levels](#severity-levels) | P0, P1, P2 criteria |
+| [Review findings block format](#review-findings-block-format) | The only definition of the findings format |
 | [Anti-patterns](#anti-patterns) | High-risk coding patterns to flag |
 | [Grounding sources](#grounding-sources) | Reference links and verification dates |
 
@@ -25,60 +26,68 @@ Systematic verification framework for reviewing Python source code against enter
 
 ### 1. Typing and interfaces
 - [ ] Every function and method has complete argument and return type annotations.
-- [ ] No bare `Any` types without explanatory comments.
-- [ ] External clients adhere to abstract `Protocol` or base classes.
-- [ ] Passes `mypy --strict` without suppression comments (`# type: ignore`) unless specifically justified.
+- [ ] No bare `Any` without an explanatory comment.
+- [ ] External clients adhere to a `Protocol` or abstract base.
+- [ ] Passes `mypy --strict` with no unjustified `# type: ignore`.
 
-### 2. Error handling & DLQ
+### 2. Error handling and DLQ
 - [ ] No bare `except:` or `except Exception: pass`.
-- [ ] Exceptions are differentiated into permanent, transient, and fatal.
-- [ ] Transient errors have exponential backoff with jitter.
-- [ ] DLQ envelope contains message body, error type, message, timestamp, and correlation id.
+- [ ] Exceptions are separated into permanent, transient, and fatal (rule 03).
+- [ ] Transient errors use exponential backoff with jitter.
+- [ ] DLQ envelope matches the one in rule 03.
 
-### 3. Modularity & mockability
-- [ ] External clients are injected via constructor or method parameters.
+### 3. Modularity and mockability
+- [ ] External clients are injected via constructor or parameters.
 - [ ] No global mutable state or module-level client instantiation.
-- [ ] Functions are single-responsibility and easily unit-testable in isolation.
+- [ ] Functions are single-responsibility and testable in isolation.
 
-### 4. Observability & security
-- [ ] Structured JSON logging with `correlation_id`, `batch_id`, and `record_id`.
-- [ ] Zero hardcoded secrets, connection strings, or account numbers.
-- [ ] Sensitive fields masked in log output.
+### 4. Observability and security
+- [ ] Structured JSON logging with `correlation_id`, `batch_id`, and `record_id` where applicable.
+- [ ] No hardcoded secrets, connection strings, or account numbers.
+- [ ] Sensitive fields and raw model prompts/completions are masked or omitted from logs.
+
+### 5. Architecture conformance
+- [ ] Every cloud service used appears in `docs/<id>/component-matrix.md`.
+- [ ] IAM, encryption, and secret handling match `docs/<id>/security-design.md`.
+- [ ] Calls resting on `unverified` or `stale` SDK facts are flagged `# re-verify against SDK version` and listed in `docs/<id>/code/sdk-evidence.md`.
 
 ---
 
-## P0 blocker criteria
+## Severity levels
 
-Mark as **P0** in review findings if any of the following are observed:
-1. Hardcoded secret, password, or AWS/Azure/GCP credential.
-2. Direct instantiation of concrete cloud/database clients in business logic without injection mechanism.
-3. Bare exception swallowing that drops failed records without logging or DLQ publishing.
-4. Missing type annotations on public module APIs.
-5. Missing docstrings on public classes or functions.
+- **P0 (blocker):** hardcoded credential or endpoint; concrete client instantiated in business logic; exception swallowed with no log or DLQ; missing type annotations or docstrings on public API; service or IAM choice contradicting the approved architecture.
+- **P1 (high):** missing retry or DLQ envelope on an external call; unhandled transient error; non-structured logging; unflagged unverified SDK call.
+- **P2 (medium):** missing type hint on an internal helper; non-standard field naming.
 
 ---
 
 ## Review findings block format
 
-```markdown
+Emit exactly one block:
+
+````markdown
+review-findings (paste into docs/<spec-id>/code/review-findings.md)
+
 ### Review findings: <spec-id> / <module-name>
 
 | Severity | Category | File & Line | Finding | Remediation |
 |---|---|---|---|---|
-| **[P0]** | Mockability | `src/handlers/process.py:22` | Direct instantiation `boto3.client("s3")` | Pass `s3_client: S3ClientProtocol` into constructor |
-| **[P1]** | Error handling | `src/adapters/queue.py:55` | Retry loop lacks jitter | Add random jitter to avoid thundering herd |
+| P0 | Mockability | `src/handlers/process.py:22` | Direct instantiation `boto3.client("s3")` | Pass `s3_client: S3ClientProtocol` into constructor |
+| P1 | Error handling | `src/adapters/queue.py:55` | Retry loop lacks jitter | Add random jitter |
 
 **Open decisions / follow-ups:**
 1. [P0] ...
-```
+````
+
+Use plain `P0`/`P1`/`P2` in the Severity column. List every gap as an open decision; never omit silently.
 
 ---
 
 ## Anti-patterns
 
-- **God modules:** Single file exceeding 500 lines combining transport, business logic, and database operations.
-- **Hidden side effects:** Modifying incoming dictionary records in-place rather than returning new immutable objects.
-- **Unstructured prints:** Using `print(f"Error: {e}")` instead of structured logger.
+- **God modules:** one file over 500 lines mixing transport, business logic, and persistence.
+- **Hidden side effects:** mutating incoming records in place instead of returning new objects.
+- **Unstructured prints:** `print(f"Error: {e}")` instead of a structured logger.
 
 ---
 
