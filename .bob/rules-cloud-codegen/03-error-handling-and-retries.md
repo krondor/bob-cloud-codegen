@@ -4,11 +4,14 @@ Universal error taxonomy and reliability conventions for event-driven Python cod
 
 ## 1. Exception taxonomy
 
-All domain exceptions must inherit from a base domain exception:
+Define `DomainError` once (conventionally `src/<package>/errors.py`) with three subclasses, and derive all
+domain exceptions from them. Skills import these as `PermanentError` and `TransientError`.
 
-- **Permanent errors** (e.g., `SchemaValidationError`, `InvalidPayloadError`): Fatal for the single message. Do not retry; route directly to Dead Letter Queue (DLQ) with error metadata.
-- **Transient errors** (e.g., `RateLimitExceededError`, `ConnectionTimeoutError`, `ServiceUnavailableError`): Retryable with exponential backoff and full jitter.
-- **Fatal system errors** (e.g., `ConfigurationError`, `AuthenticationError`): Stop execution or bubble up to runtime container; do not consume or acknowledge message without alerting.
+- **`PermanentError`** (e.g., `SchemaValidationError`, `InvalidPayloadError`): Fatal for the single message. Do not retry; route directly to the Dead Letter Queue (DLQ) with error metadata.
+- **`TransientError`** (e.g., `RateLimitExceededError`, `ConnectionTimeoutError`, `ServiceUnavailableError`): Retryable with exponential backoff and full jitter.
+- **`FatalError`** (e.g., `ConfigurationError`, `AuthenticationError`): Stop execution or bubble up to the runtime container; do not consume or acknowledge the message without alerting.
+
+Wrap SDK exceptions at the adapter boundary into one of these; never let a raw SDK exception cross it.
 
 ## 2. Retry policies
 
