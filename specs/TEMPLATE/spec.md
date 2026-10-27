@@ -1,6 +1,10 @@
 # spec.md
 
-**Spec ID:** <!-- e.g. 001-event-handler-codegen -->
+<!-- If bob-cloud-architect already produced specs/<id>/spec.md, reuse it: do not create a second spec.
+     Add the "Code acceptance criteria" below to it (a human edit, then re-approve). This template is
+     for a spec that has no upstream architecture. -->
+
+**Spec ID:** <!-- same ID as the architect spec, e.g. 001-event-platform-arch -->
 **Mode:** cloud-codegen
 **Status:** draft
 **Requirements approval:** pending
@@ -40,8 +44,9 @@
 
 ## Architecture inputs
 
-<!-- List the architecture artifacts this spec depends on.
-     Examples: docs/<spec-id>/component-matrix.md, data models, API contracts. -->
+<!-- List the files this spec depends on, or write "none" if there is no upstream architecture.
+     Typical: specs/<id>/plan.md, docs/<id>/component-matrix.md, docs/<id>/security-design.md,
+     docs/<id>/evidence-register.md. The mode stops if a listed file is missing. -->
 
 ---
 
@@ -53,17 +58,13 @@
 
 ---
 
-## Acceptance criteria
+## Code acceptance criteria
 
-The code generation task is complete when all of the following are satisfied:
+The code generation task is complete when the standards in `AGENTS.md` (Definition of done) hold and:
 
 - [ ] All specified modules in `src/` are fully implemented with no placeholders.
-- [ ] All functions and methods have type hints and docstrings.
-- [ ] No hardcoded secrets, endpoints, or account identifiers.
-- [ ] All external clients are injectable and mockable.
-- [ ] Structured logging with `correlation_id` propagated throughout.
-- [ ] Error handling differentiates permanent vs transient errors with DLQ wrapping.
-- [ ] Passes `mypy --strict` and `ruff check`.
+- [ ] Every cloud service used appears in `docs/<id>/component-matrix.md`.
+- [ ] <!-- add one checkbox per module-specific behavior to prove -->
 
 ---
 

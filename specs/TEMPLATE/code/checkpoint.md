@@ -1,9 +1,10 @@
-# checkpoint.md
+# checkpoint.md (code)
 
-<!-- Session state record. Update after completing each task in tasks.md.
-     Enables cold session resumption and mode-switch handoff without replaying history. -->
+<!-- Owned by cloud-codegen. Lives at specs/<id>/code/checkpoint.md; the architect's specs/<id>/checkpoint.md is read-only.
+     Update after each task so a cold session can resume without replaying history. -->
 
 **Spec revision:** rev 1
+**Architect spec revision consumed:** <!-- revision from specs/<id>/checkpoint.md, or "none" -->
 **Last updated:** <!-- YYYY-MM-DD -->
 **Active task:** <!-- Task name or completed -->
 
@@ -11,21 +12,21 @@
 
 | Task | Artifact path | Completed date | Notes |
 |---|---|---|---|
-| Task 1 | `src/models/records.py` | <!-- YYYY-MM-DD --> | Pydantic v2 domain schemas |
+| Task 1 | `src/errors.py` | <!-- YYYY-MM-DD --> | Rule 03 taxonomy |
 
 ## Blockers and open decisions
 
-<!-- List any active blockers or unresolved open decisions from spec.md -->
+<!-- Active blockers, or references to code/plan.md Open decisions -->
 - None
 
 ## Validation status
 
-| Check | Tool / Command | Status | Notes |
+| Check | Command | Status | Notes |
 |---|---|---|---|
-| Linting | `ruff check src/` | pending | |
+| Lint | `ruff check src/` | pending | |
 | Type check | `mypy --strict src/` | pending | |
 
 ## Next action
 
-<!-- Exactly what the agent should do when resuming this spec -->
+<!-- Exactly what to do on resume -->
 - Proceed with Task 2: Implement integration adapter protocols and clients.
