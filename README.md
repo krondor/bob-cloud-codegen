@@ -4,7 +4,22 @@ A shareable IBM Bob workspace mode for generating production-ready Python source
 
 ## What this is
 
-The `cloud-codegen` mode gives Bob the role of a senior cloud-native Python engineer. It takes an approved architecture document and produces modular, fully typed, fully documented Python source code across event handlers, enterprise data platform adapters, LLM processing, retry/DLQ logic, reconciliation, and observability.
+The `cloud-codegen` mode gives Bob the role of a senior cloud-native Python engineer. It takes an approved spec plus the [`bob-cloud-architect`](https://github.com/krondor/bob-cloud-architect) deliverables and produces modular, fully typed, fully documented Python source code across event handlers, enterprise data platform adapters, LLM processing, retry/DLQ logic, and observability. A read-only `code-reviewer` mode produces a gap analysis of the result.
+
+## How it works with bob-cloud-architect
+
+Both modes share one spec ID and each owns its own files:
+
+| Path | Owner | cloud-codegen |
+|---|---|---|
+| `specs/<id>/spec.md` | human | read-only |
+| `specs/<id>/{plan,tasks,checkpoint}.md`, `docs/<id>/*.md` | cloud-architect | read-only |
+| `specs/<id>/code/`, `docs/<id>/code/` | cloud-codegen | read-write |
+| `src/`, `prompts/` | cloud-codegen | read-write |
+
+Start gate: `spec.md` approved, at least one architect task done, every listed input file present. Start a **new session** and point it at the files; do not carry the architecture conversation over. The consumption contract (which tables and columns are read, how `unverified` evidence is treated) is in `.bob/rules-cloud-codegen/04-architect-handoff.md`.
+
+The `edit` permission is limited by a path pattern to `src/`, `prompts/`, `specs/<id>/code/`, and `docs/<id>/code/`. That pattern has not been verified under every Bob runtime, so treat the ownership table as the rule and the pattern as a backstop.
 
 ## What it is not
 
@@ -22,21 +37,24 @@ npx github:krondor/bob-cloud-codegen
 | Option | Effect |
 |---|---|
 | `--dry-run` | Print what would change; write nothing |
-| `--with-templates` | Also copy `AGENTS.md` if it does not already exist |
-| `--force` | Replace an existing `cloud-codegen` block in `custom_modes.yaml` |
+| `--modes a,b` | Install only the named modes (`cloud-codegen`, `code-reviewer`) |
+| `--with-hooks` | Install the ruff/mypy PostToolUse hook and `.bob/settings.json` |
+| `--no-agents` | Skip `AGENTS.md` (use when installing alongside `bob-cloud-architect`) |
+| `--force` | Replace locally modified files and mode entries |
+
+Installing next to `bob-cloud-architect` in one workspace: install the architect first, then run this installer with `--no-agents`. Mode entries and rules are merged per slug; `skills-lock.json` is merged per skill key. `specs/TEMPLATE/spec.md` is shared and is not overwritten once present.
 
 ## Setup
 
 1. Open the workspace folder in Bob and select **Cloud Code Generator** in the mode picker.
-2. Fill in `AGENTS.md` — provide the architecture document location, target cloud(s), Python version, data platform details, and approved dependencies.
-3. Ensure the approved architecture document exists at the path referenced in `AGENTS.md`.
+2. Reuse the architect's `specs/<id>/spec.md`: add its **Code acceptance criteria** and **Architecture inputs**, then have a human set `Requirements approval`. With no upstream architecture, copy `specs/TEMPLATE/spec.md` and write `Architecture inputs: none`.
+3. Check `AGENTS.md` matches your Python version, tools, and approved dependencies.
 
 ## Suggested first prompts
 
-- "Review AGENTS.md and specs/ and tell me what spec is active and what the next task is."
-- "The spec is in specs/TEMPLATE/spec.md — start with plan.md."
-- "Implement the next task in tasks.md."
-- "Generate the event handler module per the current spec."
+- "Read specs/<id>/spec.md, specs/<id>/plan.md, and docs/<id>/component-matrix.md. The architecture is approved; do code-gen for the components in the matrix. Do not re-derive architecture decisions."
+- "Resume from specs/<id>/code/checkpoint.md."
+- "Implement the next task in specs/<id>/code/tasks.md."
 
 ## Code quality standards enforced by this mode
 
@@ -49,9 +67,9 @@ npx github:krondor/bob-cloud-codegen
 
 ## Review before use
 
-- **Not yet run against a real engagement.** Mode YAML syntax has been validated; first pilot run is the real test.
-- **AGENTS.md has placeholder sections.** Fill them in, including the architecture document location, before running any code generation session.
-- **Hooks (ruff, mypy) ship with this repo.** Copy `.bob/hooks/` and `.bob/settings.json` into your workspace (or use `scripts/install.mjs --with-hooks`). Requires `ruff` and `mypy` installed in the Python environment.
+- **Not yet run against a real engagement.** The installer, mode YAML, and size gates are tested; the end-to-end architect → codegen handoff has not been run live. Expect to tune `04-architect-handoff.md` after the first pilot.
+- **Architect deliverables are Markdown tables.** There is no schema, so a renamed column upstream is a silent break. The handoff rule makes the mode look columns up by header and raise an open decision when one is missing.
+- **The lint hook is optional and fails open.** Install with `--with-hooks`. It runs `ruff` and `mypy --strict` after a Python file is written and reports findings to the agent; it skips silently if the tools are absent. It reports; it does not block.
 
 ## Local customization
 
@@ -72,25 +90,23 @@ A skill is a `SKILL.md` file that Bob loads via `use_skill`. To add one:
 
 ### Edit or add a rules file
 
-Rules files live in `.bob/rules-cloud-codegen/`. Each file begins with `<!-- load when: ... -->`. Edit any file freely.
-
-To add a new rules domain (e.g. async patterns):
-1. Create `.bob/rules-cloud-codegen/09-async-patterns.md` with a `<!-- load when: ... -->` header.
-2. Add a matching entry in the dispatch table inside `.bob/custom_modes.yaml` under `customInstructions`.
+Rules files live in `.bob/rules-cloud-codegen/` and are **all** loaded every session; Bob has no conditional rule loading. Add a rule only if it applies to every task, otherwise put it in a skill. Keep the total under the ceiling in `test/install.test.mjs` (trim wording rather than raising it).
 
 ### Enable or modify hooks
-
-The repo ships a pre-edit hook at `.bob/hooks/pre-edit.mjs` that runs `ruff check` and `mypy --strict` before every Python file write. To enable it in your workspace:
 
 ```bash
 node scripts/install.mjs --with-hooks /path/to/your-project
 ```
 
-Or manually copy `.bob/hooks/` and `.bob/settings.json` into your workspace and trust the workspace in Bob. To change what the hook checks, edit `.bob/hooks/pre-edit.mjs` directly.
+The hook is `.bob/hooks/lint-python.mjs`, registered as a `PostToolUse` hook in `.bob/settings.json`. Hooks only run in a trusted workspace. Test it with a real payload:
+
+```bash
+echo '{"cwd":".","tool_input":{"path":"src/example.py"}}' | node .bob/hooks/lint-python.mjs
+```
 
 ### Update the spec template
 
-The spec template lives in `specs/TEMPLATE/spec.md`. Copy it to a new directory (e.g. `specs/my-project/`) and fill it in before starting a code generation session.
+The spec template lives in `specs/TEMPLATE/spec.md`, and the code plan, tasks, and checkpoint templates in `specs/TEMPLATE/code/`. Prefer reusing the architect's spec over creating a new one; copy `code/` into `specs/<id>/code/`.
 
 ## Contributing via git
 
