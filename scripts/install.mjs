@@ -49,11 +49,11 @@ Options:
   --dry-run             Print what would change; write nothing.
   --force               Overwrite locally modified files and replace existing mode entries.
   --with-examples       Also install example specs (specs/NNN-*). Off by default.
-  --with-hooks          Install .bob/hooks/ and .bob/settings.json if present.
+  --with-hooks          Install .bob/hooks/ and .bob/settings.json (PostToolUse ruff/mypy lint hook).
   --no-agents           Skip installing AGENTS.md.
   --no-mcp              Skip installing .bob/mcp.json.example.
   --no-templates        Skip installing spec templates (specs/).
-  --no-skills           Skip installing skills in .bob/skills/.
+  --no-skills           Skip installing skills in .bob/skills/ (and merging skills-lock.json).
   --no-rules            Skip installing mode rules in .bob/rules-*/.
   --no-mode             Skip updating .bob/custom_modes.yaml.
   -h, --help            Show this help message.
@@ -253,6 +253,45 @@ if (!NO_SKILLS) {
       .map((d) => d.name);
     for (const skill of skillDirs) {
       copy(`.bob/skills/${skill}`, `.bob/skills/${skill}`);
+    }
+  }
+}
+
+// Merge skills-lock.json by skill key so sibling repos' entries are never overwritten.
+if (!NO_SKILLS && existsSync(join(SRC, "skills-lock.json"))) {
+  const srcLock = JSON.parse(readFileSync(join(SRC, "skills-lock.json"), "utf8"));
+  const destRel = "skills-lock.json";
+  const destPath = join(TARGET, destRel);
+  let destLock = { skills: {} };
+  if (existsSync(destPath)) {
+    try {
+      destLock = JSON.parse(readFileSync(destPath, "utf8"));
+    } catch {
+      console.error(`${destRel} is not valid JSON; leaving it untouched.`);
+      destLock = null;
+    }
+  }
+  if (destLock) {
+    destLock.skills ??= {};
+    let changed = false;
+    for (const [name, entry] of Object.entries(srcLock.skills ?? {})) {
+      // Only record skills this run installed or confirmed up to date; a locally modified or
+      // foreign skill file keeps whatever entry its owner wrote.
+      const owned = installed.some((p) => posix(p) === `.bob/skills/${name}/SKILL.md`);
+      if (!owned) {
+        log(`skip   ${destRel}#${name} (skill file not installed by this run)`);
+        continue;
+      }
+      if (JSON.stringify(destLock.skills[name]) !== JSON.stringify(entry)) {
+        destLock.skills[name] = entry;
+        changed = true;
+      }
+    }
+    if (changed) {
+      if (!DRY) writeFileSync(destPath, JSON.stringify(destLock, null, 2) + "\n");
+      log(`merge  ${destRel} (by skill key)`);
+    } else {
+      log(`ok     ${destRel} (up to date)`);
     }
   }
 }
